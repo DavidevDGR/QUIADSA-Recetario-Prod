@@ -61,6 +61,15 @@ class VirtualKeyboard:
 
     # ------------------------------------------------------------------
     def mostrar(self, target_widget, numeric_only=False):
+        # IMPORTANTE: se recalcula la ventana "padre" (Toplevel) en cada
+        # apertura, en lugar de reutilizar siempre la ventana principal.
+        # Si el campo de texto está dentro de un diálogo modal (por
+        # ejemplo, el cuadro de "Motivo del desvío de tiempo", que usa
+        # grab_set()), Tk bloquea los eventos de cualquier ventana que no
+        # sea descendiente de esa ventana modal. Creando el teclado como
+        # hijo de la ventana que realmente tiene el foco/grab activo, sus
+        # botones vuelven a recibir los clics correctamente.
+        self.root = target_widget.winfo_toplevel()
         self.target = target_widget
         self.numeric_only = numeric_only
         self._construir_ventana()
@@ -76,6 +85,10 @@ class VirtualKeyboard:
         p.ej. añadir operario / leer OF) y cierra el teclado."""
         if self.target is not None:
             try:
+                # Es necesario forzar el foco de teclado real sobre el
+                # widget antes de generar el evento, o Tk no lo despacha.
+                self.target.focus_force()
+                self.target.update_idletasks()
                 self.target.event_generate("<Return>")
             except tk.TclError:
                 pass
@@ -269,13 +282,19 @@ class VirtualKeyboard:
 
 def attach_keyboard(widget, numeric_only=False):
     """
-    Asocia el teclado virtual a un widget Entry o Text: se mostrará al
-    pulsar/enfocar el widget.
+    Asocia el teclado virtual a un widget Entry o Text: se muestra al
+    tocar/pulsar el widget con el ratón/dedo.
+
+    NOTA: deliberadamente NO se usa el evento <FocusIn> para mostrar el
+    teclado. Al cerrar la ventana emergente del teclado (Toplevel), el
+    gestor de ventanas devuelve el foco de teclado al widget que lo tenía
+    antes (el propio campo), lo que dispararía <FocusIn> de nuevo y
+    reabriría el teclado inmediatamente. Usando solo el click, cerrar con
+    CERRAR/ENTER funciona de forma fiable.
     """
-    def _on_focus(event):
+    def _on_click(event):
         root = widget.winfo_toplevel()
         kb = VirtualKeyboard.get(root)
         kb.mostrar(widget, numeric_only=numeric_only)
 
-    widget.bind("<Button-1>", _on_focus)
-    widget.bind("<FocusIn>", _on_focus)
+    widget.bind("<Button-1>", _on_click)

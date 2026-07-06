@@ -22,18 +22,23 @@ COLUMNAS = [
     "Estado",
     "Código OF",
     "Máquina",
-    "Operarios",
+    "Operarios iniciales",
     "Fecha/Hora inicio OF",
     "Fecha/Hora fin OF",
     "Tiempo total (min)",
     "Peso tara (kg)",
     "Peso total (kg)",
     "Peso neto (kg)",
+    "Incidencia peso neto",
     "Sección Nº",
     "Instrucción sección",
+    "Operarios sección",
     "Tiempo previsto sección (min)",
     "Tiempo real sección (min)",
     "Incidencia sección",
+    "Pausa inicio",
+    "Pausa fin",
+    "Pausa (min)",
 ]
 
 
@@ -56,11 +61,30 @@ def _abrir_o_crear_libro(ruta_excel):
     return wb, ws
 
 
-def exportar_ejecucion(ejecucion: dict, secciones: list):
+def _pausas_de_seccion(pausas: list, seccion_id) -> tuple:
+    """Filtra las pausas que ocurrieron durante una sección concreta y
+    devuelve tres cadenas (inicio, fin, minutos), una por columna. Si hay
+    varias pausas en la misma sección, se separan con ' ; ' dentro de cada
+    columna, manteniendo el mismo orden en las tres."""
+    de_la_seccion = [p for p in pausas if p.get("ejecucion_seccion_id") == seccion_id]
+    if not de_la_seccion:
+        return "", "", ""
+    inicios = [p.get("fecha_inicio") or "" for p in de_la_seccion]
+    fines = [p.get("fecha_fin") or "(sin finalizar)" for p in de_la_seccion]
+    minutos = [str(p.get("tiempo_total_min")) if p.get("tiempo_total_min") is not None
+               else "-" for p in de_la_seccion]
+    return " ; ".join(inicios), " ; ".join(fines), " ; ".join(minutos)
+
+
+def exportar_ejecucion(ejecucion: dict, secciones: list, pausas: list = None):
     """
     Añade al Excel una fila por cada sección de la ejecución indicada.
     `ejecucion` es el dict devuelto por LocalRepository.obtener_ejecucion().
-    `secciones` es la lista de dicts devuelta por obtener_secciones().
+    `secciones` es la lista de dicts devuelta por obtener_secciones()
+    (incluye la clave "operarios" con los operarios de cada sección).
+    `pausas` es la lista de dicts devuelta por obtener_pausas(); cada pausa
+    incluye "ejecucion_seccion_id" para poder mostrarla en la fila de la
+    sección durante la que ocurrió.
     """
     ruta_excel = _asegurar_carpeta()
     wb, ws = _abrir_o_crear_libro(ruta_excel)
@@ -73,42 +97,41 @@ def exportar_ejecucion(ejecucion: dict, secciones: list):
     if peso_tara is not None and peso_llena is not None:
         peso_neto = round(peso_llena - peso_tara, 2)
 
+    pausas = pausas or []
+    incidencia_peso = ejecucion.get("peso_incidencia_motivo") or ""
+
+    fila_comun = [
+        fecha_exportacion,
+        ejecucion["estado"],
+        ejecucion["codigo_of"],
+        ejecucion["maquina_id"],
+        ejecucion["operarios"],
+        ejecucion["fecha_inicio"],
+        ejecucion["fecha_fin"],
+        ejecucion["tiempo_total_min"],
+        peso_tara,
+        peso_llena,
+        peso_neto,
+        incidencia_peso,
+    ]
+
     if secciones:
         for sec in secciones:
-            ws.append([
-                fecha_exportacion,
-                ejecucion["estado"],
-                ejecucion["codigo_of"],
-                ejecucion["maquina_id"],
-                ejecucion["operarios"],
-                ejecucion["fecha_inicio"],
-                ejecucion["fecha_fin"],
-                ejecucion["tiempo_total_min"],
-                peso_tara,
-                peso_llena,
-                peso_neto,
+            pausa_inicio, pausa_fin, pausa_min = _pausas_de_seccion(pausas, sec["id"])
+            ws.append(fila_comun + [
                 sec["numero_seccion"],
                 sec["texto"],
+                ", ".join(sec.get("operarios", [])),
                 sec["tiempo_previsto_min"],
                 sec["tiempo_real_min"],
                 sec["incidencia_motivo"] or "",
+                pausa_inicio,
+                pausa_fin,
+                pausa_min,
             ])
     else:
         # Cancelada sin ninguna sección iniciada.
-        ws.append([
-            fecha_exportacion,
-            ejecucion["estado"],
-            ejecucion["codigo_of"],
-            ejecucion["maquina_id"],
-            ejecucion["operarios"],
-            ejecucion["fecha_inicio"],
-            ejecucion["fecha_fin"],
-            ejecucion["tiempo_total_min"],
-            peso_tara,
-            peso_llena,
-            peso_neto,
-            "", "", "", "", "",
-        ])
+        ws.append(fila_comun + ["", "", "", "", "", "", "", "", ""])
 
     wb.save(ruta_excel)
     return ruta_excel
