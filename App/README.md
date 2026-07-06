@@ -17,8 +17,7 @@ Pulsa **Esc** para salir del modo pantalla completa mientras desarrollas.
 ## Generar un .exe para enseñar la app en otros equipos (Windows)
 
 Se usa **PyInstaller**. Importante: PyInstaller compila para el sistema
-operativo en el que se ejecuta, así que este paso **debes hacerlo tú en tu
-PC con Windows** (no se puede generar un .exe de Windows desde Linux/Mac).
+operativo en el que se ejecuta.
 
 1. Abre un símbolo de sistema (cmd) en la carpeta del proyecto.
 2. Ejecuta:
