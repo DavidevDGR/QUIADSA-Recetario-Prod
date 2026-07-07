@@ -2,16 +2,14 @@
 """
 Aplicación táctil de control de fabricación en cuba, con soporte de
 MÚLTIPLES Órdenes de Fabricación simultáneas mediante un sistema de
-pestañas (como un navegador tipo Chrome).
+pestañas.
 
 FASE 1: Identificación de operarios + lectura OF + cuba + peso tara.
 FASE 2: Ejecución de secciones con temporizador; gestión de operarios
-        habilitada también aquí (no solo en Fase 1); Cancelar/Anterior/
-        Siguiente.
+        habilitada; Cancelar/Anterior/Siguiente.
 FASE 3: Pantalla final -> peso total -> comprobación de desviación del
         peso neto respecto a la cantidad prevista en la OF -> exporta a
-        Excel -> cierra la pestaña (y abre una nueva en blanco si era la
-        única).
+        Excel -> cierra la pestaña (y abre una nueva si era la única).
 
 Ejecutar con:  python main.py
 """
@@ -68,7 +66,7 @@ class TabState:
 
     def etiqueta(self) -> str:
         if self.orden:
-            return f"OF {self.orden.codigo_of}"
+            return f"{self.orden.codigo_of}"
         return "Nueva OF"
 
 

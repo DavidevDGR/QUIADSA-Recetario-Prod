@@ -17,7 +17,8 @@ Pulsa **Esc** para salir del modo pantalla completa mientras desarrollas.
 ## Generar un .exe para enseñar la app en otros equipos (Windows)
 
 Se usa **PyInstaller**. Importante: PyInstaller compila para el sistema
-operativo en el que se ejecuta.
+operativo en el que se ejecuta, así que este paso **debes hacerlo tú en tu
+PC con Windows** (no se puede generar un .exe de Windows desde Linux/Mac).
 
 1. Abre un símbolo de sistema (cmd) en la carpeta del proyecto.
 2. Ejecuta:
@@ -26,7 +27,7 @@ operativo en el que se ejecuta.
    ```
    Esto instala las dependencias (`requirements.txt`), limpia compilaciones
    anteriores y genera el ejecutable.
-3. El resultado queda en `dist\CubaApp.exe`. Para enseñarlo en otro equipo,
+3. El resultado queda en `dist\AppFabricacion.exe`. Para enseñarlo en otro equipo,
    **copia solo ese fichero** — no hace falta llevar Python instalado ni el
    resto de carpetas del proyecto.
 
@@ -47,7 +48,7 @@ Notas:
 
 ## Estructura
 
-- `build_exe.bat` — script para compilar `CubaApp.exe` con PyInstaller (ver
+- `build_exe.bat` — script para compilar `AppFabricacion.exe` con PyInstaller (ver
   sección anterior).
 - `requirements.txt` — dependencias del proyecto.
 
@@ -80,9 +81,6 @@ Notas:
   cualquier campo de texto (`attach_keyboard(entry)`) o numérico
   (`attach_keyboard(entry, numeric_only=True)`). Se llama así (y no
   `keyboard.py`) para no chocar con el paquete de PyPI `keyboard`.
-- `explorar_solmicro.py` — script independiente para localizar, sin
-  adivinar, las tablas/columnas reales de OF y Tipos de Ruta en tu Solmicro
-  (ver sección siguiente).
 
 ## Conectar con la base de datos real de Solmicro
 
@@ -99,15 +97,17 @@ Notas:
 
 ### 2) Configurar la conexión
 
-Edita `config.py` y rellena `SOLMICRO_CONN_STRING` con esos datos:
+Edita `config.py` y rellena `SOLMICRO_CONN_STRING` con esos datos (el
+usuario/contraseña de solo lectura ya están puestos: `lectura`/`lectura`;
+solo falta el servidor y la base de datos reales):
 
 ```python
 SOLMICRO_CONN_STRING = (
     "DRIVER={ODBC Driver 17 for SQL Server};"
-    "SERVER=IP_O_NOMBRE_SERVIDOR;"
-    "DATABASE=NombreBaseDatos;"
-    "UID=usuario;"
-    "PWD=clave;"
+    "SERVER=IP_O_NOMBRE_SERVIDOR,1435;"   # <-- tu servidor real (puerto 1435)
+    "DATABASE=NOMBRE_BASE_DATOS;"          # <-- nombre real de la BD
+    "UID=lectura;"
+    "PWD=lectura;"
 )
 ```
 
@@ -116,32 +116,29 @@ Instala la librería necesaria:
 pip install pyodbc
 ```
 
-### 3) Encontrar las tablas/columnas reales (sin adivinar)
+### 3) Esquema real ya mapeado
 
-Con la conexión ya configurada, ejecuta:
-```bash
-python explorar_solmicro.py
-```
-Esto lista las tablas cuyo nombre contiene palabras como "orden", "fabrica",
-"ruta", "seccion", etc. Para inspeccionar una tabla concreta (columnas +
-primeras filas):
-```bash
-python explorar_solmicro.py NOMBRE_DE_LA_TABLA
-```
-Si no aparece ninguna coincidencia, amplía las listas `PALABRAS_CLAVE_OF` /
-`PALABRAS_CLAVE_RUTA` al principio del script con otros términos plausibles
-para tu instalación.
+Las consultas en `config.py` ya están escritas contra el esquema real
+confirmado (tablas `tbOrdenFabricacion` y `tbRuta`):
 
-### 4) Ajustar las consultas SQL
+| Campo de la app | Columna real |
+|---|---|
+| Código OF (escaneado) | `tbOrdenFabricacion.NOrden` |
+| Artículo | `tbOrdenFabricacion.IDArticulo` |
+| Cantidad (kg) | `tbOrdenFabricacion.QFabricar` |
+| Centro/máquina | `tbOrdenFabricacion.IDCentroGestion` |
+| Tipo de ruta | `tbOrdenFabricacion.IDTipoRuta` |
+| Nº de sección | `tbRuta.Secuencia` |
+| Instrucción | `tbRuta.Texto` |
+| Tiempo previsto (min) | `tbRuta.TiempoEjecUnit` (ya en minutos) |
 
-Una vez identificadas las tablas y columnas reales, edita en `config.py`
-las variables `SQL_ORDEN_FABRICACION` y `SQL_SECCIONES_RUTA`, sustituyendo
-los nombres de ejemplo (`OrdenesFabricacion`, `CodigoOF`, `TiposRuta`,
-`CodigoTipoRuta`, etc.) por los reales. Cada consulta debe devolver las
-columnas con los alias indicados en los comentarios (o usar `AS` para
-renombrarlas), ya que `db.py` las referencia por esos nombres exactos.
+Las secciones se filtran por `IDTipoRuta`. Si al probar aparecen
+operaciones de otro artículo mezcladas (porque varios artículos comparten
+el mismo tipo de ruta), cambia el filtro de `SQL_SECCIONES_RUTA` en
+`config.py` para usar `IDArticulo + IDRuta` en su lugar, que es más
+específico.
 
-### 5) Activar el modo real
+### 4) Activar el modo real
 
 En `db.py`, cambia:
 ```python

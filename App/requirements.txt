@@ -1,0 +1,6 @@
+openpyxl>=3.1
+pyinstaller>=6.0
+
+# Descomenta la siguiente línea SOLO cuando conectes con Solmicro de verdad
+# (no hace falta mientras MOCK_MODE = True en db.py):
+pyodbc>=5.0

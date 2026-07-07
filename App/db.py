@@ -29,7 +29,7 @@ import config
 # =========================================================================
 
 # Cambia a False cuando tengas la conexión real a Solmicro configurada.
-MOCK_MODE = True
+MOCK_MODE = False
 
 
 @dataclass
@@ -50,19 +50,15 @@ class OrdenFabricacion:
 
 
 class SolmicroRepository:
-    """Encapsula el acceso al ERP Solmicro. Adaptar aquí la conexión real."""
+    """Encapsula el acceso al ERP Solmicro. En modo real (MOCK_MODE=False)
+    abre una conexión de solo lectura por pyodbc usando la cadena de
+    conexión y las consultas SQL definidas en config.py."""
 
     def __init__(self):
+        self.conn = None
         if not MOCK_MODE:
-            # ---------------------------------------------------------------
-            # EJEMPLO de conexión real con pyodbc (SQL Server). Descomentar
-            # e instalar `pip install pyodbc` cuando se disponga de acceso.
-            # ---------------------------------------------------------------
-            # import pyodbc
-            # self.conn = pyodbc.connect(config.SOLMICRO_CONN_STRING)
-            raise NotImplementedError(
-                "Configura la conexión real a Solmicro en db.py (SolmicroRepository.__init__)"
-            )
+            import pyodbc  # requiere: pip install pyodbc
+            self.conn = pyodbc.connect(config.SOLMICRO_CONN_STRING, timeout=5)
 
     def obtener_orden_fabricacion(self, codigo_of: str) -> Optional[OrdenFabricacion]:
         """
@@ -76,54 +72,36 @@ class SolmicroRepository:
         if MOCK_MODE:
             return self._mock_obtener_orden(codigo_of)
 
-        # ---------------------------------------------------------------
-        # EJEMPLO de consulta real. Ajustar nombres de tablas/columnas
-        # a la instalación concreta de Solmicro.
-        # ---------------------------------------------------------------
-        # cursor = self.conn.cursor()
-        # cursor.execute(
-        #     """
-        #     SELECT CodigoTipoRuta, Articulo, CantidadKg, Centro
-        #     FROM OrdenesFabricacion
-        #     WHERE CodigoOF = ?
-        #     """,
-        #     codigo_of,
-        # )
-        # row = cursor.fetchone()
-        # if not row:
-        #     return None
-        # of_data = OrdenFabricacion(
-        #     codigo_of=codigo_of,
-        #     codigo_tipo_ruta=row.CodigoTipoRuta,
-        #     articulo=row.Articulo,
-        #     cantidad_kg=row.CantidadKg,
-        #     centro=row.Centro,
-        # )
-        # of_data.secciones = self._obtener_secciones(of_data.codigo_tipo_ruta)
-        # return of_data
-        raise NotImplementedError
+        cursor = self.conn.cursor()
+        cursor.execute(config.SQL_ORDEN_FABRICACION, codigo_of)
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        of_data = OrdenFabricacion(
+            codigo_of=str(row.NOrden),
+            codigo_tipo_ruta=str(row.IDTipoRuta) if row.IDTipoRuta else "",
+            articulo=str(row.IDArticulo),
+            cantidad_kg=float(row.QFabricar),
+            centro=str(row.IDCentroGestion),
+        )
+        of_data.secciones = self._obtener_secciones(of_data.codigo_tipo_ruta)
+        return of_data
 
     def _obtener_secciones(self, codigo_tipo_ruta: str) -> List[SeccionRuta]:
         if MOCK_MODE:
             return self._mock_secciones(codigo_tipo_ruta)
 
-        # ---------------------------------------------------------------
-        # cursor = self.conn.cursor()
-        # cursor.execute(
-        #     """
-        #     SELECT NumeroSeccion, Texto, TiempoEjecucionMin
-        #     FROM TiposRuta
-        #     WHERE CodigoTipoRuta = ?
-        #     ORDER BY NumeroSeccion ASC
-        #     """,
-        #     codigo_tipo_ruta,
-        # )
-        # return [
-        #     SeccionRuta(numero=r.NumeroSeccion, texto=r.Texto,
-        #                  tiempo_ejecucion_min=r.TiempoEjecucionMin)
-        #     for r in cursor.fetchall()
-        # ]
-        raise NotImplementedError
+        cursor = self.conn.cursor()
+        cursor.execute(config.SQL_SECCIONES_RUTA, codigo_tipo_ruta)
+        return [
+            SeccionRuta(
+                numero=int(r.Secuencia),
+                texto=str(r.Texto) if r.Texto else "",
+                tiempo_ejecucion_min=float(r.TiempoEjecUnit),
+            )
+            for r in cursor.fetchall()
+        ]
 
     # ------------------------------------------------------------------
     # DATOS DE PRUEBA (MOCK) - permiten ejecutar la app sin Solmicro real

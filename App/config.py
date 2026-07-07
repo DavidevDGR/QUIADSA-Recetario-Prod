@@ -24,60 +24,49 @@ else:
 LOCAL_DB_PATH = os.path.join(BASE_DIR, "cuba_app.db")
 
 # --- Conexión a Solmicro (ERP) ---
-# TODO: sustituir por los datos reales de conexión (SQL Server).
-# Pídele a IT/soporte de Solmicro estos datos (ver checklist en README.md):
-#   - Servidor (IP o nombre) y puerto (si no es el 1433 por defecto)
-#   - Nombre de la base de datos
-#   - Usuario y contraseña (a ser posible, un usuario de solo lectura)
-#   - Driver ODBC instalado en el PC (ej. "ODBC Driver 17 for SQL Server")
+# Servidor con instancia con nombre (SOLMICRO) y puerto NO estándar (1435):
+# formato SERVER=IP\INSTANCIA,PUERTO
 SOLMICRO_CONN_STRING = (
     "DRIVER={ODBC Driver 17 for SQL Server};"
-    "SERVER=SERVIDOR_SOLMICRO;"
-    "DATABASE=Solmicro;"
-    "UID=usuario;"
-    "PWD=clave;"
+    "SERVER=10.0.0.210\\SOLMICRO,1435;"
+    "DATABASE=QUI_xQUIADSA;"
+    "UID=lectura;"
+    "PWD=lectura;"
 )
 
-# --- Consultas SQL a Solmicro ---
-# TODO: sustituir estos nombres de tabla/columna por los reales de tu
-# instalación. Usa `explorar_solmicro.py` (incluido en este proyecto) para
-# localizarlos sin tener que adivinarlos: busca tablas relacionadas con
-# "orden", "fabrica", "ruta", "seccion", etc. y sus columnas.
-#
-# La consulta de la OF debe devolver, para el código de OF dado (parámetro
-# "?"), estas 4 columnas con esos alias exactos (o renombra con AS):
-#   CodigoTipoRuta, Articulo, CantidadKg, Centro
+# --- Consultas SQL a Solmicro (esquema real confirmado) ---
+# La OF se busca por su código legible ("NOrden", el que se escanea por
+# código de barras). Se filtran las secciones por IDTipoRuta (según lo
+# confirmado), usando el campo "Texto" (ntext) como instrucción y
+# "TiempoEjecUnit" directamente como minutos previstos de la sección.
 SQL_ORDEN_FABRICACION = """
     SELECT
-        CodigoTipoRuta,
-        Articulo,
-        CantidadKg,
-        Centro
-    FROM OrdenesFabricacion   -- <-- AJUSTAR nombre real de la tabla
-    WHERE CodigoOF = ?        -- <-- AJUSTAR nombre real de la columna
+        NOrden,
+        IDArticulo,
+        IDTipoRuta,
+        QFabricar,
+        IDCentroGestion
+    FROM tbOrdenFabricacion
+    WHERE NOrden = ?
 """
 
-# La consulta de secciones debe devolver, para el código de tipo de ruta
-# dado (parámetro "?"), estas 3 columnas con esos alias exactos, ordenadas
-# por número de sección ascendente:
-#   NumeroSeccion, Texto, TiempoEjecucionMin
 SQL_SECCIONES_RUTA = """
     SELECT
-        NumeroSeccion,
+        Secuencia,
         Texto,
-        TiempoEjecucionMin
-    FROM TiposRuta                    -- <-- AJUSTAR nombre real de la tabla
-    WHERE CodigoTipoRuta = ?          -- <-- AJUSTAR nombre real de la columna
-    ORDER BY NumeroSeccion ASC
+        TiempoEjecUnit
+    FROM tbRuta
+    WHERE IDTipoRuta = ?
+    ORDER BY Secuencia ASC
 """
 
 # Identificador de esta máquina/puesto (si no se obtiene de la OF)
-MAQUINA_ID_DEFECTO = "CUBA-01"
+MAQUINA_ID_DEFECTO = "MAQUINA-01"
 
 # --- Exportación a Excel / Nube ---
 # Carpeta local de trabajo antes de subir a la nube (OneDrive/Google Drive
 # sincronizado como carpeta local es la forma más simple de "guardar en la nube").
-EXPORT_FOLDER = os.path.join(BASE_DIR, "exports")
+EXPORT_FOLDER = r"\\10.0.0.210\comun\FABRICA\AppFabricacion\exports"
 EXCEL_FILENAME = "registro_fabricacion.xlsx"
 
 # Usuario que realiza la exportación (aparece en el registro)
