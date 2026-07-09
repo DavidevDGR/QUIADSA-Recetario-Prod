@@ -28,7 +28,7 @@ import config
 # 1) SOLMICRO (ERP) - CONSULTAS DE LECTURA
 # =========================================================================
 
-# Cambia a False cuando tengas la conexión real a Solmicro configurada.
+# Cambia a False cuando conexión real a Solmicro configurada.
 MOCK_MODE = False
 
 
@@ -272,19 +272,27 @@ class LocalRepository:
                   datetime.datetime.now().isoformat(timespec="seconds")))
             return cur.lastrowid
 
-    def cerrar_seccion(self, seccion_id: int, incidencia_motivo: Optional[str] = None):
+    def cerrar_seccion(self, seccion_id: int, incidencia_motivo: Optional[str] = None,
+                       tiempo_real_min_override: Optional[float] = None):
         with self._conn() as c:
-            fecha_inicio = c.execute(
-                "SELECT fecha_inicio FROM ejecucion_seccion WHERE id=?", (seccion_id,)
-            ).fetchone()[0]
-            fecha_fin = datetime.datetime.now()
-            inicio = datetime.datetime.fromisoformat(fecha_inicio)
-            tiempo_real = (fecha_fin - inicio).total_seconds() / 60.0
+            ahora = datetime.datetime.now()
+            if tiempo_real_min_override is not None:
+                # Se usa el tiempo ya calculado por la app (por ejemplo,
+                # excluyendo las pausas si config.PAUSA_DETIENE_CONTADOR
+                # está activo) en lugar de recalcularlo aquí por reloj de
+                # pared, para que el Excel coincida con lo visto en pantalla.
+                tiempo_real = tiempo_real_min_override
+            else:
+                fecha_inicio = c.execute(
+                    "SELECT fecha_inicio FROM ejecucion_seccion WHERE id=?", (seccion_id,)
+                ).fetchone()[0]
+                inicio = datetime.datetime.fromisoformat(fecha_inicio)
+                tiempo_real = (ahora - inicio).total_seconds() / 60.0
             c.execute("""
                 UPDATE ejecucion_seccion
                 SET fecha_fin=?, tiempo_real_min=?, incidencia_motivo=?
                 WHERE id=?
-            """, (fecha_fin.isoformat(timespec="seconds"), round(tiempo_real, 2),
+            """, (ahora.isoformat(timespec="seconds"), round(tiempo_real, 2),
                   incidencia_motivo, seccion_id))
 
     # ---------------- Operarios por sección ----------------

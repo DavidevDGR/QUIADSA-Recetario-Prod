@@ -64,8 +64,7 @@ SQL_SECCIONES_RUTA = """
 MAQUINA_ID_DEFECTO = "MAQUINA-01"
 
 # --- Exportación a Excel / Nube ---
-# Carpeta local de trabajo antes de subir a la nube (OneDrive/Google Drive
-# sincronizado como carpeta local es la forma más simple de "guardar en la nube").
+# Carpeta compartida en red donde se guarda el Excel de registro.
 EXPORT_FOLDER = r"\\10.0.0.210\comun\FABRICA\AppFabricacion\exports"
 EXCEL_FILENAME = "registro_fabricacion.xlsx"
 
@@ -79,6 +78,16 @@ MARGEN_TIEMPO_PORCENTAJE = 0.10  # 10%
 # % de margen sobre la cantidad (kg) prevista en la OF, aplicado al peso neto
 # final, antes de exigir motivo de incidencia
 MARGEN_PESO_PORCENTAJE = 0.10  # 10%
+
+# Comportamiento del botón Pausa/Reanudar:
+# - False (por defecto): el contador de la sección sigue corriendo en tiempo real
+#   aunque se pulse Pausa; la pausa solo queda registrada (inicio/fin/minutos), 
+#   pero no afecta al contador en pantalla ni al tiempo real de la sección.
+
+# - True: al pulsar Pausa el contador se congela; al pulsar Reanudar continúa 
+#   exactamente desde ese point. Esto también afecta al tiempo real de la sección 
+#   que se exporta al Excel y a la comprobación del margen de tiempo.
+PAUSA_DETIENE_CONTADOR = False
 
 # Tamaño de fuente / interfaz táctil
 FONT_FAMILY = "Segoe UI"

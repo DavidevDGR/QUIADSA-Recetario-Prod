@@ -2,14 +2,16 @@
 """
 Aplicación táctil de control de fabricación en cuba, con soporte de
 MÚLTIPLES Órdenes de Fabricación simultáneas mediante un sistema de
-pestañas.
+pestañas (como un navegador tipo Chrome).
 
 FASE 1: Identificación de operarios + lectura OF + cuba + peso tara.
 FASE 2: Ejecución de secciones con temporizador; gestión de operarios
-        habilitada; Cancelar/Anterior/Siguiente.
+        habilitada también aquí (no solo en Fase 1); Cancelar/Anterior/
+        Siguiente.
 FASE 3: Pantalla final -> peso total -> comprobación de desviación del
         peso neto respecto a la cantidad prevista en la OF -> exporta a
-        Excel -> cierra la pestaña (y abre una nueva si era la única).
+        Excel -> cierra la pestaña (y abre una nueva en blanco si era la
+        única).
 
 Ejecutar con:  python main.py
 """
@@ -57,16 +59,17 @@ class TabState:
     seccion_iniciada_idx: Optional[int] = None
     seccion_inicio_dt: Optional[datetime.datetime] = None
     hora_inicio_of: Optional[datetime.datetime] = None
-    # Operarios que han estado presentes en algún momento durante la
-    # sección actualmente en curso (se guarda al cerrar la sección, para
-    # trazabilidad/exportación, aunque luego se hayan quitado de la lista).
-    seccion_operarios_historial: Set[str] = field(default_factory=set)
     # id de la pausa actualmente abierta (None si no hay ninguna en curso)
     pausa_actual_id: Optional[int] = None
+    # Momento en que se pulsó PAUSA (para calcular cuánto ha durado al
+    # reanudar). Junto con segundos_pausados_seccion, permite que el
+    # contador se congele durante la pausa y siga desde donde estaba.
+    pausa_inicio_dt: Optional[datetime.datetime] = None
+    segundos_pausados_seccion: float = 0.0
 
     def etiqueta(self) -> str:
         if self.orden:
-            return f"{self.orden.codigo_of}"
+            return self.orden.codigo_of
         return "Nueva OF"
 
 
@@ -258,10 +261,6 @@ class App(tk.Tk):
         if val and val not in t.operarios:
             t.operarios.append(val)
             self.lista_operarios.insert(tk.END, val)
-            if t.fase == "fase2":
-                # Se registra como "ha estado" en la sección actual, aunque
-                # más tarde se le quite de la lista de operarios activos.
-                t.seccion_operarios_historial.add(val)
         self.entry_operario.delete(0, tk.END)
         self.entry_operario.focus_set()
 
@@ -448,7 +447,6 @@ class App(tk.Tk):
         # cambiar a otra pestaña y regresar a esta misma sección) NO se
         # reinicia nada, así el tiempo transcurrido se mantiene correcto.
         if t.seccion_iniciada_idx != t.seccion_idx:
-            t.seccion_operarios_historial = set(t.operarios)
             t.seccion_actual_id = self.local_db.iniciar_seccion(
                 ejecucion_of_id=t.ejecucion_id,
                 numero_seccion=seccion.numero,
@@ -457,6 +455,8 @@ class App(tk.Tk):
             )
             t.seccion_inicio_dt = datetime.datetime.now()
             t.seccion_iniciada_idx = t.seccion_idx
+            t.segundos_pausados_seccion = 0.0
+            t.pausa_inicio_dt = None
 
         self._tick_timer()
 
@@ -470,10 +470,19 @@ class App(tk.Tk):
         t = self.tab_activo
         if t.fase != "fase2" or t.seccion_inicio_dt is None:
             return
-        transcurrido = (datetime.datetime.now() - t.seccion_inicio_dt).total_seconds()
-        mins, secs = divmod(int(transcurrido), 60)
+        self._actualizar_etiqueta_timer(t)
+        # Si PAUSA_DETIENE_CONTADOR está activo y hay una pausa en curso,
+        # el contador se queda congelado: no se reprograma el siguiente
+        # tick hasta que se pulse Reanudar. Si está desactivado (por
+        # defecto), el contador sigue avanzando en tiempo real aunque haya
+        # una pausa abierta.
+        if not (config.PAUSA_DETIENE_CONTADOR and t.pausa_actual_id is not None):
+            self.timer_job = self.after(1000, self._tick_timer)
+
+    def _actualizar_etiqueta_timer(self, t: TabState):
+        transcurrido_seg = self._tiempo_transcurrido_min(t) * 60
+        mins, secs = divmod(int(transcurrido_seg), 60)
         self.timer_lbl.config(text=f"{mins:02d}:{secs:02d}")
-        self.timer_job = self.after(1000, self._tick_timer)
 
     def _detener_timer(self):
         if self.timer_job:
@@ -481,7 +490,23 @@ class App(tk.Tk):
             self.timer_job = None
 
     def _tiempo_transcurrido_min(self, t: TabState):
-        return (datetime.datetime.now() - t.seccion_inicio_dt).total_seconds() / 60.0
+        """Tiempo transcurrido de la sección actual, en minutos.
+
+        Si config.PAUSA_DETIENE_CONTADOR es True, se EXCLUYE el tiempo que
+        haya estado en pausa (tanto pausas ya cerradas como, si hay una en
+        curso ahora mismo, la parte transcurrida de ella): el contador se
+        congela al pausar y continúa desde donde estaba al reanudar.
+
+        Si es False (comportamiento por defecto), se devuelve el tiempo
+        real transcurrido sin descontar nada: el contador sigue corriendo
+        aunque haya una pausa abierta; la pausa solo queda registrada para
+        el Excel."""
+        transcurrido_seg = (datetime.datetime.now() - t.seccion_inicio_dt).total_seconds()
+        if config.PAUSA_DETIENE_CONTADOR:
+            transcurrido_seg -= t.segundos_pausados_seccion
+            if t.pausa_actual_id is not None and t.pausa_inicio_dt is not None:
+                transcurrido_seg -= (datetime.datetime.now() - t.pausa_inicio_dt).total_seconds()
+        return transcurrido_seg / 60.0
 
     def _fuera_de_margen_tiempo(self, t: TabState, tiempo_previsto_min):
         """True si se avanza fuera del margen (config.MARGEN_TIEMPO_PORCENTAJE)
@@ -558,9 +583,12 @@ class App(tk.Tk):
                 return  # el operario canceló el diálogo, no avanza
 
         self._detener_timer()
-        self.local_db.cerrar_seccion(t.seccion_actual_id, incidencia_motivo=motivo)
+        self.local_db.cerrar_seccion(
+            t.seccion_actual_id, incidencia_motivo=motivo,
+            tiempo_real_min_override=(
+                self._tiempo_transcurrido_min(t) if config.PAUSA_DETIENE_CONTADOR else None))
         self.local_db.registrar_operarios_seccion(
-            t.seccion_actual_id, sorted(t.seccion_operarios_historial))
+            t.seccion_actual_id, sorted(t.operarios))
 
         if es_ultima:
             t.fase = "fase3"
@@ -580,17 +608,19 @@ class App(tk.Tk):
                 "Pulse REANUDAR antes de volver a la sección anterior.")
             return
         self._detener_timer()
-        self.local_db.cerrar_seccion(t.seccion_actual_id,
-                                      incidencia_motivo="Vuelta a sección anterior")
+        self.local_db.cerrar_seccion(
+            t.seccion_actual_id, incidencia_motivo="Vuelta a sección anterior",
+            tiempo_real_min_override=(
+                self._tiempo_transcurrido_min(t) if config.PAUSA_DETIENE_CONTADOR else None))
         self.local_db.registrar_operarios_seccion(
-            t.seccion_actual_id, sorted(t.seccion_operarios_historial))
+            t.seccion_actual_id, sorted(t.operarios))
         t.seccion_idx -= 1
         self.mostrar_fase2()
 
     def _actualizar_boton_pausa(self, t: TabState):
-        """Refleja en el botón si hay una pausa en curso o no. Este botón
-        NO detiene el temporizador de la sección; solo registra la fecha/
-        hora de inicio y fin de la pausa (y su duración) para el Excel."""
+        """Refleja en el botón si hay una pausa en curso o no. Al pulsar
+        PAUSA se congela el temporizador de la sección; al pulsar REANUDAR
+        continúa desde donde se quedó (el tiempo en pausa no cuenta)."""
         if t.pausa_actual_id is None:
             self.btn_pausa.config(text="⏸ PAUSA", bg="#FBC02D", fg="black")
         else:
@@ -599,11 +629,22 @@ class App(tk.Tk):
     def _toggle_pausa(self):
         t = self.tab_activo
         if t.pausa_actual_id is None:
+            if config.PAUSA_DETIENE_CONTADOR:
+                # Congelar el contador en el valor exacto justo antes de pausar.
+                self._actualizar_etiqueta_timer(t)
+                self._detener_timer()
+            t.pausa_inicio_dt = datetime.datetime.now()
             t.pausa_actual_id = self.local_db.iniciar_pausa(
                 t.ejecucion_id, ejecucion_seccion_id=t.seccion_actual_id)
         else:
             self.local_db.finalizar_pausa(t.pausa_actual_id)
+            if t.pausa_inicio_dt is not None:
+                t.segundos_pausados_seccion += (
+                    datetime.datetime.now() - t.pausa_inicio_dt).total_seconds()
             t.pausa_actual_id = None
+            t.pausa_inicio_dt = None
+            if config.PAUSA_DETIENE_CONTADOR:
+                self._tick_timer()  # reanuda el contador desde donde estaba
         self._actualizar_boton_pausa(t)
 
     def _finalizar_pausa_si_procede(self, t: TabState):
@@ -611,7 +652,11 @@ class App(tk.Tk):
         cierra automáticamente para no dejar datos incompletos en el Excel."""
         if t.pausa_actual_id is not None:
             self.local_db.finalizar_pausa(t.pausa_actual_id)
+            if t.pausa_inicio_dt is not None:
+                t.segundos_pausados_seccion += (
+                    datetime.datetime.now() - t.pausa_inicio_dt).total_seconds()
             t.pausa_actual_id = None
+            t.pausa_inicio_dt = None
 
     def _cancelar_of_tab(self, t: "TabState", motivo: str):
         """Cancela la ejecución de la OF de la pestaña indicada. Si la
@@ -620,9 +665,12 @@ class App(tk.Tk):
         para que quede reflejado en el Excel."""
         self._finalizar_pausa_si_procede(t)
         if t.fase == "fase2" and t.seccion_actual_id:
-            self.local_db.cerrar_seccion(t.seccion_actual_id, incidencia_motivo=motivo)
+            self.local_db.cerrar_seccion(
+                t.seccion_actual_id, incidencia_motivo=motivo,
+                tiempo_real_min_override=(
+                    self._tiempo_transcurrido_min(t) if config.PAUSA_DETIENE_CONTADOR else None))
             self.local_db.registrar_operarios_seccion(
-                t.seccion_actual_id, sorted(t.seccion_operarios_historial))
+                t.seccion_actual_id, sorted(t.operarios))
         self.local_db.cancelar_ejecucion(t.ejecucion_id)
         self._exportar_tab(t)
 

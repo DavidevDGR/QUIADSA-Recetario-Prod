@@ -66,7 +66,7 @@ Notas:
   fila por sección, incluyendo: fecha de exportación, estado (CANCELADA/
   FINALIZADA), OF, máquina, operarios iniciales, fechas de inicio/fin,
   tiempo total, peso tara/total/neto y su incidencia si la hubo, y por cada
-  sección: instrucción, operarios que han estado en ella, tiempo
+  sección: instrucción, operarios activos al cerrarla, tiempo
   previsto/real, incidencia, y las pausas ocurridas **durante esa sección
   concreta** en tres columnas separadas ("Pausa inicio", "Pausa fin",
   "Pausa (min)"); si hay varias pausas en la misma sección, se separan con
@@ -192,17 +192,27 @@ que Solmicro ha respondido.
   - **Botón Pausa/Reanudar** (junto a Cancelar OF): amarillo "⏸ PAUSA" al
     pulsarlo registra la fecha/hora de inicio de la pausa y cambia a verde
     "▶ REANUDAR"; al volver a pulsarlo registra la fecha/hora de fin y la
-    duración en minutos. **No detiene el temporizador de la sección**, solo
-    registra el periodo de pausa para el Excel. Si se cancela o finaliza la
-    OF con una pausa abierta, se cierra automáticamente para no dejar datos
-    incompletos. **Si hay una pausa sin reanudar, no se puede avanzar con
+    duración en minutos. Si se cancela o finaliza la OF con una pausa
+    abierta, se cierra automáticamente para no dejar datos incompletos.
+    **Si hay una pausa sin reanudar, no se puede avanzar con
     Siguiente/Finalizar ni retroceder con Anterior**: aparece un aviso
     pidiendo reanudarla primero.
+    - Comportamiento configurable con `config.PAUSA_DETIENE_CONTADOR`:
+      - `False` (por defecto): el temporizador de la sección **sigue
+        corriendo en tiempo real** aunque esté en pausa; la pausa solo
+        queda registrada para el Excel, sin afectar al cronómetro ni al
+        tiempo real de la sección.
+      - `True`: el temporizador **se congela** al pulsar Pausa (p. ej. en
+        00:30) y continúa exactamente desde ahí al pulsar Reanudar (00:31,
+        00:32...). Esto también afecta al tiempo real de la sección que se
+        exporta al Excel y a la comprobación del margen de tiempo del 10%,
+        que en ese caso se calculan excluyendo el tiempo en pausa.
   - **Gestión de operarios habilitada también aquí**: se pueden añadir o
-    quitar operarios en cualquier sección, no solo al principio. Se
-    registra qué operarios han estado presentes en cada sección (aunque
-    luego se quiten de la lista, quedan reflejados como que "han estado"
-    en esa sección concreta) para la exportación a Excel.
+    quitar operarios en cualquier sección, no solo al principio. Al cerrar
+    cada sección (Siguiente/Finalizar/Anterior/Cancelar) se exporta una
+    "foto" de los operarios que están **activos en ese momento** en esa
+    sección concreta; si alguien se quita antes de que la sección se
+    cierre, ya no aparecerá en su registro.
   - Si se pulsa Siguiente con un desvío de más del **10%** (antes o
     después, `config.MARGEN_TIEMPO_PORCENTAJE`) respecto al tiempo
     previsto de la sección, se exige un motivo antes de continuar.
