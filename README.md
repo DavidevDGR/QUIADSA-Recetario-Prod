@@ -64,8 +64,10 @@ Notas:
     exportación a Excel.
 - `export.py` — genera/actualiza `exports/registro_fabricacion.xlsx` con una
   fila por sección, incluyendo: fecha de exportación, estado (CANCELADA/
-  FINALIZADA), OF, máquina, operarios iniciales, fechas de inicio/fin,
-  tiempo total, peso tara/total/neto y su incidencia si la hubo, y por cada
+  FINALIZADA), OF, **lote** (`tbOrdenFabricacion.Lote`, se obtiene
+  automáticamente de Solmicro pero solo se exporta, nunca se muestra en la
+  app), máquina, operarios iniciales, fechas de inicio/fin, tiempo total,
+  peso tara/total/neto y su incidencia si la hubo, y por cada
   sección: instrucción, operarios activos al cerrarla, tiempo
   previsto/real, incidencia, y las pausas ocurridas **durante esa sección
   concreta** en tres columnas separadas ("Pausa inicio", "Pausa fin",
@@ -180,16 +182,25 @@ que Solmicro ha respondido.
     CANCELADA antes de cerrar de verdad la aplicación.
 - **Fase 1**: alta de uno o varios operarios (Enter o botón Añadir), con
   lista donde se pueden seleccionar y **eliminar** por si alguien se ha
-  equivocado. Lectura de OF por código de barras, cuba y peso de tara.
-  Todos los campos muestran el **teclado virtual QWERTY** al pulsarlos.
+  equivocado. Lectura de OF por código de barras, cuba (teclado numérico) y
+  peso de tara. Todos los campos muestran el **teclado virtual** al
+  pulsarlos (QWERTY para texto, numérico para cuba y pesos).
 - **Fase 2**: instrucción de la sección, temporizador ascendente, botones
   Cancelar OF (arriba-izquierda), Anterior y Siguiente/Finalizar.
   - **Toda cancelación de una OF** (botón Cancelar OF, cerrar su pestaña, o
     cerrar la aplicación) **exige escribir un motivo** mediante una ventana
-    que no se puede cerrar sin rellenarlo. Ese motivo se registra como la
+    con botones **Aceptar** y **Cancelar**. Si se pulsa Cancelar (o se
+    cierra la ventana con el aspa), se aborda toda la acción y no se
+    cancela nada. Si se acepta con un motivo, este se registra como la
     incidencia de la sección que estaba en curso en ese momento, y se
     exporta en su fila correspondiente del Excel.
-  - **Botón Pausa/Reanudar** (junto a Cancelar OF): amarillo "⏸ PAUSA" al
+  - **El botón Anterior también pide un motivo** (con las mismas opciones
+    Aceptar/Cancelar) antes de volver a la sección previa; el motivo
+    indicado se registra como la incidencia de la sección que se cierra al
+    retroceder, y se exporta al Excel. Si se pulsa Cancelar en ese diálogo,
+    no se retrocede de sección.
+  - **Botón Pausa/Reanudar** (arriba a la derecha, en paralelo a Cancelar
+    OF): amarillo "⏸ PAUSA" al
     pulsarlo registra la fecha/hora de inicio de la pausa y cambia a verde
     "▶ REANUDAR"; al volver a pulsarlo registra la fecha/hora de fin y la
     duración en minutos. Si se cancela o finaliza la OF con una pausa
@@ -208,19 +219,23 @@ que Solmicro ha respondido.
         exporta al Excel y a la comprobación del margen de tiempo del 10%,
         que en ese caso se calculan excluyendo el tiempo en pausa.
   - **Gestión de operarios habilitada también aquí**: se pueden añadir o
-    quitar operarios en cualquier sección, no solo al principio. Al cerrar
+    quitar operarios en cualquier sección, no solo al principio. **No se
+    puede avanzar con Siguiente/Finalizar ni retroceder con Anterior si no
+    queda ningún operario activo** (igual que en la Fase 1): aparece un
+    aviso pidiendo añadir al menos uno. Al cerrar
     cada sección (Siguiente/Finalizar/Anterior/Cancelar) se exporta una
     "foto" de los operarios que están **activos en ese momento** en esa
     sección concreta; si alguien se quita antes de que la sección se
     cierre, ya no aparecerá en su registro.
   - Si se pulsa Siguiente con un desvío de más del **10%** (antes o
     después, `config.MARGEN_TIEMPO_PORCENTAJE`) respecto al tiempo
-    previsto de la sección, se exige un motivo antes de continuar.
+    previsto de la sección, se exige un motivo antes de continuar (también
+    con opción de Cancelar para no avanzar).
 - **Fase 3**: tiempo total, peso tara, campo de peso total con cálculo en
   vivo del **peso neto** (peso total − peso tara).
   - Si el peso neto se desvía más de un **10%** (`config.
     MARGEN_PESO_PORCENTAJE`) de la cantidad prevista en la OF, se exige un
-    motivo antes de poder finalizar.
+    motivo antes de poder finalizar (con opción de Cancelar).
   - Botón Fin: registra, exporta a Excel (peso tara/total/neto, motivo de
     la incidencia de peso si la hubo, y operarios de cada sección) y
     cierra la pestaña.

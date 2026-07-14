@@ -150,6 +150,8 @@ class App(tk.Tk):
                 f"Se va a cancelar la orden {t.etiqueta()} al cerrar su pestaña.\n"
                 "Indique el motivo de la cancelación:",
                 "Motivo de la cancelación (cierre de pestaña)")
+            if motivo is None:
+                return  # el operario pulsó Cancelar: no se cierra la pestaña
             self._cancelar_of_tab(t, motivo)
 
         self._quitar_tab_de_listas(tab_id)
@@ -305,7 +307,7 @@ class App(tk.Tk):
         self.entry_cuba.pack(pady=5)
         if t.cuba_id:
             self.entry_cuba.insert(0, t.cuba_id)
-        attach_keyboard(self.entry_cuba)
+        attach_keyboard(self.entry_cuba, numeric_only=True)
 
         tk.Label(f, text="Peso tara de la cuba (kg):", font=FONT_N).pack(pady=(10, 0))
         self.entry_tara = tk.Entry(f, font=FONT_N, width=20)
@@ -374,6 +376,7 @@ class App(tk.Tk):
             cuba_id=t.cuba_id,
             peso_tara=t.peso_tara,
             cantidad_of_kg=t.orden.cantidad_kg,
+            lote_of=t.orden.lote,
         )
         t.seccion_idx = 0
         t.fase = "fase2"
@@ -392,18 +395,21 @@ class App(tk.Tk):
         seccion = secciones[t.seccion_idx]
         es_ultima = t.seccion_idx == len(secciones) - 1
 
-        # --- Barra superior: Cancelar + Pausa + progreso ---
+        # --- Barra superior: Cancelar (izq) + Pausa (der), en paralelo ---
         top = tk.Frame(f)
         top.pack(fill="x", pady=10, padx=10)
         tk.Button(top, text="✕ CANCELAR OF", font=FONT_N, bg="#e53935", fg="white",
                   command=self._cancelar_of).pack(side="left")
 
+        # Empaquetados de derecha a izquierda: el botón de Pausa queda en la
+        # esquina superior derecha (paralelo a Cancelar), y la etiqueta de
+        # progreso de sección queda justo a su izquierda.
         self.btn_pausa = tk.Button(top, font=FONT_N, command=self._toggle_pausa)
-        self.btn_pausa.pack(side="left", padx=(10, 0))
+        self.btn_pausa.pack(side="right")
         self._actualizar_boton_pausa(t)
 
         tk.Label(top, text=f"Sección {seccion.numero} de {len(secciones)}",
-                 font=FONT_N).pack(side="right")
+                 font=FONT_N).pack(side="right", padx=(0, 10))
 
         tk.Label(f, text=f"OF: {t.orden.codigo_of}  |  Cuba: {t.cuba_id}",
                  font=FONT_N, fg="gray").pack(pady=(0, 5))
@@ -521,18 +527,18 @@ class App(tk.Tk):
 
     def _pedir_motivo_incidencia(self, mensaje: str,
                                   titulo="Motivo de la incidencia") -> str:
-        """Ventana modal genérica para pedir un motivo de incidencia
-        (se reutiliza para desvíos de tiempo, de peso y para motivos de
-        cancelación). Es de obligada cumplimentación: no se puede cerrar
-        con el botón de la ventana del sistema operativo, solo escribiendo
-        el motivo y pulsando Aceptar."""
+        """Ventana modal genérica para pedir un motivo de incidencia (se
+        reutiliza para desvíos de tiempo, de peso, retroceso de sección y
+        motivos de cancelación). Tiene un botón Cancelar (y cerrar con el
+        aspa del sistema operativo hace lo mismo) por si el operario ha
+        pulsado el botón correspondiente sin querer: en ese caso devuelve
+        None y la acción que lo originó no se lleva a cabo."""
         resultado = {"motivo": None}
 
         win = tk.Toplevel(self)
         win.title(titulo)
         win.grab_set()
         win.attributes("-topmost", True)
-        win.protocol("WM_DELETE_WINDOW", lambda: None)  # no se puede cerrar sin rellenar
 
         tk.Label(win, text=mensaje, font=FONT_N, wraplength=500,
                  justify="left").pack(padx=20, pady=15)
@@ -542,18 +548,29 @@ class App(tk.Tk):
         txt.focus_set()
         attach_keyboard(txt)
 
+        def cancelar():
+            resultado["motivo"] = None
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", cancelar)
+
         def aceptar():
             motivo = txt.get("1.0", "end").strip()
             if not motivo:
                 messagebox.showwarning("Motivo requerido",
-                                        "Debe indicar un motivo para continuar.",
+                                        "Debe indicar un motivo para continuar, "
+                                        "o pulsar Cancelar.",
                                         parent=win)
                 return
             resultado["motivo"] = motivo
             win.destroy()
 
-        tk.Button(win, text="Aceptar", font=FONT_N, bg="#1565C0", fg="white",
-                  command=aceptar).pack(pady=15)
+        botones = tk.Frame(win)
+        botones.pack(pady=15)
+        tk.Button(botones, text="Cancelar", font=FONT_N, bg="#9e9e9e", fg="white",
+                  command=cancelar).pack(side="left", padx=10)
+        tk.Button(botones, text="Aceptar", font=FONT_N, bg="#1565C0", fg="white",
+                  command=aceptar).pack(side="left", padx=10)
 
         win.wait_window()
         return resultado["motivo"]
@@ -566,6 +583,13 @@ class App(tk.Tk):
                 "Pausa sin reanudar",
                 "Hay una pausa en curso que no se ha reanudado.\n"
                 "Pulse REANUDAR antes de continuar a la siguiente sección.")
+            return
+
+        if not t.operarios:
+            messagebox.showwarning(
+                "Sin operarios",
+                "No hay ningún operario registrado.\n"
+                "Añada al menos uno antes de continuar.")
             return
 
         secciones = t.orden.secciones
@@ -607,9 +631,23 @@ class App(tk.Tk):
                 "Hay una pausa en curso que no se ha reanudado.\n"
                 "Pulse REANUDAR antes de volver a la sección anterior.")
             return
+        if not t.operarios:
+            messagebox.showwarning(
+                "Sin operarios",
+                "No hay ningún operario registrado.\n"
+                "Añada al menos uno antes de continuar.")
+            return
+
         self._detener_timer()
+        motivo = self._pedir_motivo_incidencia(
+            "Indique el motivo para volver a la sección anterior:",
+            "Motivo del retroceso de sección")
+        if motivo is None:
+            self._tick_timer()  # el operario pulsó Cancelar: se reanuda el contador
+            return
+
         self.local_db.cerrar_seccion(
-            t.seccion_actual_id, incidencia_motivo="Vuelta a sección anterior",
+            t.seccion_actual_id, incidencia_motivo=motivo,
             tiempo_real_min_override=(
                 self._tiempo_transcurrido_min(t) if config.PAUSA_DETIENE_CONTADOR else None))
         self.local_db.registrar_operarios_seccion(
@@ -694,6 +732,12 @@ class App(tk.Tk):
                     f"Se va a cancelar la orden {t.etiqueta()} porque se está "
                     "cerrando la aplicación.\nIndique el motivo de la cancelación:",
                     "Motivo de la cancelación (cierre de la aplicación)")
+                if motivo is None:
+                    # El operario pulsó Cancelar: se aborta el cierre de la
+                    # aplicación (las OF ya canceladas en este mismo bucle,
+                    # si las hubiera, quedan como CANCELADA; el resto sigue
+                    # en curso con normalidad).
+                    return
                 self._cancelar_of_tab(t, motivo)
 
         self.destroy()
@@ -708,6 +752,9 @@ class App(tk.Tk):
         motivo = self._pedir_motivo_incidencia(
             "Indique el motivo de la cancelación de esta orden de fabricación:",
             "Motivo de la cancelación")
+        if motivo is None:
+            self._tick_timer()  # el operario pulsó Cancelar: se reanuda el contador
+            return
         self._cancelar_of_tab(t, motivo)
         self._reiniciar_tab_a_fase1(t.tab_id)
 

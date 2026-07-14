@@ -45,7 +45,8 @@ SQL_ORDEN_FABRICACION = """
         IDArticulo,
         IDTipoRuta,
         QFabricar,
-        IDCentroGestion
+        IDCentroGestion,
+        Lote
     FROM tbOrdenFabricacion
     WHERE NOrden = ?
 """
@@ -80,13 +81,15 @@ MARGEN_TIEMPO_PORCENTAJE = 0.10  # 10%
 MARGEN_PESO_PORCENTAJE = 0.10  # 10%
 
 # Comportamiento del botón Pausa/Reanudar:
-# - False (por defecto): el contador de la sección sigue corriendo en tiempo real
-#   aunque se pulse Pausa; la pausa solo queda registrada (inicio/fin/minutos), 
-#   pero no afecta al contador en pantalla ni al tiempo real de la sección.
-
-# - True: al pulsar Pausa el contador se congela; al pulsar Reanudar continúa 
-#   exactamente desde ese point. Esto también afecta al tiempo real de la sección 
-#   que se exporta al Excel y a la comprobación del margen de tiempo.
+# - False (por defecto, comportamiento actual): el contador de la sección
+#   sigue corriendo en tiempo real aunque se pulse Pausa; la pausa solo
+#   queda registrada (inicio/fin/minutos) para el Excel, pero no afecta al
+#   cronómetro en pantalla ni al tiempo real de la sección.
+# - True: al pulsar Pausa el contador se congela (p.ej. en 00:30); al
+#   pulsar Reanudar continúa exactamente desde ese punto (00:31, 00:32...),
+#   como si el tiempo pausado no hubiera existido. Esto también afecta al
+#   tiempo real de la sección que se exporta al Excel y a la comprobación
+#   del margen de tiempo (MARGEN_TIEMPO_PORCENTAJE).
 PAUSA_DETIENE_CONTADOR = False
 
 # Tamaño de fuente / interfaz táctil

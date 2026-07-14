@@ -28,7 +28,7 @@ import config
 # 1) SOLMICRO (ERP) - CONSULTAS DE LECTURA
 # =========================================================================
 
-# Cambia a False cuando conexión real a Solmicro configurada.
+# Cambia a False cuando tengas la conexión real a Solmicro configurada.
 MOCK_MODE = False
 
 
@@ -46,6 +46,7 @@ class OrdenFabricacion:
     articulo: str
     cantidad_kg: float
     centro: str               # identificador de máquina
+    lote: str = ""             # tbOrdenFabricacion.Lote (solo para exportar, no se muestra en la app)
     secciones: List[SeccionRuta] = field(default_factory=list)
 
 
@@ -84,6 +85,7 @@ class SolmicroRepository:
             articulo=str(row.IDArticulo),
             cantidad_kg=float(row.QFabricar),
             centro=str(row.IDCentroGestion),
+            lote=str(row.Lote) if row.Lote else "",
         )
         of_data.secciones = self._obtener_secciones(of_data.codigo_tipo_ruta)
         return of_data
@@ -116,6 +118,7 @@ class SolmicroRepository:
             articulo="FORMULA-DEMO-A",
             cantidad_kg=500.0,
             centro=config.MAQUINA_ID_DEFECTO,
+            lote="LOTE-DEMO-2026",
         )
         of_data.secciones = self._mock_secciones(of_data.codigo_tipo_ruta)
         return of_data
@@ -157,6 +160,7 @@ class LocalRepository:
                     cuba_id TEXT NOT NULL,
                     peso_tara REAL NOT NULL,
                     cantidad_of_kg REAL,             -- cantidad prevista en la OF (kg)
+                    lote_of TEXT,                     -- tbOrdenFabricacion.Lote (solo para exportar)
                     fecha_inicio TEXT NOT NULL,
                     fecha_fin TEXT,
                     estado TEXT NOT NULL,           -- EN_CURSO / FINALIZADA / CANCELADA
@@ -205,6 +209,8 @@ class LocalRepository:
                 c.execute("ALTER TABLE ejecucion_of ADD COLUMN cantidad_of_kg REAL")
             if "peso_incidencia_motivo" not in cols_of:
                 c.execute("ALTER TABLE ejecucion_of ADD COLUMN peso_incidencia_motivo TEXT")
+            if "lote_of" not in cols_of:
+                c.execute("ALTER TABLE ejecucion_of ADD COLUMN lote_of TEXT")
             cols_pausa = {row[1] for row in c.execute("PRAGMA table_info(ejecucion_pausa)")}
             if "ejecucion_seccion_id" not in cols_pausa:
                 c.execute("ALTER TABLE ejecucion_pausa ADD COLUMN ejecucion_seccion_id INTEGER")
@@ -212,16 +218,17 @@ class LocalRepository:
     # ---------------- Ejecución de OF ----------------
 
     def crear_ejecucion(self, codigo_of, maquina_id, operarios: List[str],
-                         cuba_id, peso_tara, cantidad_of_kg: float = None) -> int:
+                         cuba_id, peso_tara, cantidad_of_kg: float = None,
+                         lote_of: str = None) -> int:
         with self._conn() as c:
             cur = c.execute("""
                 INSERT INTO ejecucion_of
                     (codigo_of, maquina_id, operarios, cuba_id, peso_tara,
-                     cantidad_of_kg, fecha_inicio, estado)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'EN_CURSO')
+                     cantidad_of_kg, lote_of, fecha_inicio, estado)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'EN_CURSO')
             """, (
                 codigo_of, maquina_id, ",".join(operarios), cuba_id, peso_tara,
-                cantidad_of_kg,
+                cantidad_of_kg, lote_of,
                 datetime.datetime.now().isoformat(timespec="seconds"),
             ))
             return cur.lastrowid
