@@ -28,7 +28,7 @@ import config
 # 1) SOLMICRO (ERP) - CONSULTAS DE LECTURA
 # =========================================================================
 
-# Cambia a False cuando tengas la conexión real a Solmicro configurada.
+# Cambia a False cuando conexión real a Solmicro configurada.
 MOCK_MODE = False
 
 
@@ -67,7 +67,7 @@ class SolmicroRepository:
         - código tipo de ruta
         - artículo (fórmula)
         - cantidad en kg a fabricar
-        - centro (identificador de máquina)
+        - centro (identificador de máquina, viene de tbRuta.IDCentro)
         - lista de secciones (a través del tipo de ruta)
         """
         if MOCK_MODE:
@@ -84,26 +84,33 @@ class SolmicroRepository:
             codigo_tipo_ruta=str(row.IDTipoRuta) if row.IDTipoRuta else "",
             articulo=str(row.IDArticulo),
             cantidad_kg=float(row.QFabricar),
-            centro=str(row.IDCentroGestion),
+            centro="",  # se rellena a continuación desde tbRuta
             lote=str(row.Lote) if row.Lote else "",
         )
-        of_data.secciones = self._obtener_secciones(of_data.codigo_tipo_ruta)
+        of_data.secciones, of_data.centro = self._obtener_secciones_y_centro(
+            of_data.codigo_tipo_ruta)
         return of_data
 
-    def _obtener_secciones(self, codigo_tipo_ruta: str) -> List[SeccionRuta]:
+    def _obtener_secciones_y_centro(self, codigo_tipo_ruta: str):
+        """Devuelve (secciones, centro). El centro es el IDCentro de la
+        primera sección (Secuencia más baja) de tbRuta, asumiendo que toda
+        la ruta comparte el mismo centro/máquina."""
         if MOCK_MODE:
-            return self._mock_secciones(codigo_tipo_ruta)
+            return self._mock_secciones(codigo_tipo_ruta), config.MAQUINA_ID_DEFECTO
 
         cursor = self.conn.cursor()
         cursor.execute(config.SQL_SECCIONES_RUTA, codigo_tipo_ruta)
-        return [
+        filas = cursor.fetchall()
+        secciones = [
             SeccionRuta(
                 numero=int(r.Secuencia),
                 texto=str(r.Texto) if r.Texto else "",
                 tiempo_ejecucion_min=float(r.TiempoEjecUnit),
             )
-            for r in cursor.fetchall()
+            for r in filas
         ]
+        centro = str(filas[0].IDCentro) if filas and filas[0].IDCentro else ""
+        return secciones, centro
 
     # ------------------------------------------------------------------
     # DATOS DE PRUEBA (MOCK) - permiten ejecutar la app sin Solmicro real

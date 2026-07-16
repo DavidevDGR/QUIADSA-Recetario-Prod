@@ -45,17 +45,22 @@ SQL_ORDEN_FABRICACION = """
         IDArticulo,
         IDTipoRuta,
         QFabricar,
-        IDCentroGestion,
         Lote
     FROM tbOrdenFabricacion
     WHERE NOrden = ?
 """
 
+# El centro/máquina (IDCentro) sale de tbRuta, NO de tbOrdenFabricacion.
+# Se toma el de la primera sección (Secuencia más baja) como centro de
+# toda la OF, asumiendo que todas las operaciones de una misma ruta
+# comparten centro. Si en la práctica varía entre secciones, avisa para
+# ajustar el criterio.
 SQL_SECCIONES_RUTA = """
     SELECT
         Secuencia,
         Texto,
-        TiempoEjecUnit
+        TiempoEjecUnit,
+        IDCentro
     FROM tbRuta
     WHERE IDTipoRuta = ?
     ORDER BY Secuencia ASC

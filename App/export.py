@@ -14,19 +14,25 @@ import os
 import datetime
 import openpyxl
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
 
 import config
 
+# NOTA: los encabezados de fecha/hora usan "y" en lugar de "/" (p.ej.
+# "Fecha y Hora exportación") por compatibilidad con otras aplicaciones
+# que interpretan "/" como separador de columnas/rutas al importar el
+# Excel.
 COLUMNAS = [
-    "Fecha/Hora exportación",
+    "ID",
+    "Fecha y Hora exportación",
     "Estado",
     "Código OF",
     "Lote",
     "Máquina",
     "Cuba",
     "Operarios iniciales",
-    "Fecha/Hora inicio OF",
-    "Fecha/Hora fin OF",
+    "Fecha y Hora inicio OF",
+    "Fecha y Hora fin OF",
     "Tiempo total (min)",
     "Peso tara (kg)",
     "Peso total (kg)",
@@ -42,6 +48,8 @@ COLUMNAS = [
     "Pausa fin",
     "Pausa (min)",
 ]
+
+NOMBRE_TABLA = "RegistroFabricacion"
 
 
 def _asegurar_carpeta():
@@ -61,6 +69,34 @@ def _abrir_o_crear_libro(ruta_excel):
         for i, _ in enumerate(COLUMNAS, start=1):
             ws.column_dimensions[get_column_letter(i)].width = 22
     return wb, ws
+
+
+def _siguiente_id(ws) -> int:
+    """El ID autoincremental continúa donde se quedó la última fila del
+    Excel (independientemente de cuántas exportaciones se hayan hecho
+    antes). La cabecera ocupa la fila 1, así que el nº de filas de datos
+    ya existentes es (max_row - 1), y el siguiente ID es max_row."""
+    return ws.max_row if ws.max_row >= 1 else 1
+
+
+def _aplicar_formato_tabla(ws):
+    """(Re)define el rango como una Tabla de Excel con encabezados y
+    estilo de filas alternas, para que se vea y filtre como una tabla de
+    verdad (no solo celdas con datos). Hay que rehacerla en cada
+    exportación porque el rango crece con las filas nuevas."""
+    if NOMBRE_TABLA in ws.tables:
+        del ws.tables[NOMBRE_TABLA]
+    ultima_columna = get_column_letter(ws.max_column)
+    rango = f"A1:{ultima_columna}{ws.max_row}"
+    tabla = Table(displayName=NOMBRE_TABLA, ref=rango)
+    tabla.tableStyleInfo = TableStyleInfo(
+        name="TableStyleMedium9",
+        showRowStripes=True,
+        showFirstColumn=False,
+        showLastColumn=False,
+        showColumnStripes=False,
+    )
+    ws.add_table(tabla)
 
 
 def _pausas_de_seccion(pausas: list, seccion_id) -> tuple:
@@ -103,7 +139,6 @@ def exportar_ejecucion(ejecucion: dict, secciones: list, pausas: list = None):
     incidencia_peso = ejecucion.get("peso_incidencia_motivo") or ""
 
     fila_comun = [
-        fecha_exportacion,
         ejecucion["estado"],
         ejecucion["codigo_of"],
         ejecucion.get("lote_of") or "",
@@ -119,10 +154,12 @@ def exportar_ejecucion(ejecucion: dict, secciones: list, pausas: list = None):
         incidencia_peso,
     ]
 
+    siguiente_id = _siguiente_id(ws)
+
     if secciones:
         for sec in secciones:
             pausa_inicio, pausa_fin, pausa_min = _pausas_de_seccion(pausas, sec["id"])
-            ws.append(fila_comun + [
+            ws.append([siguiente_id, fecha_exportacion] + fila_comun + [
                 sec["numero_seccion"],
                 sec["texto"],
                 ", ".join(sec.get("operarios", [])),
@@ -133,10 +170,13 @@ def exportar_ejecucion(ejecucion: dict, secciones: list, pausas: list = None):
                 pausa_fin,
                 pausa_min,
             ])
+            siguiente_id += 1
     else:
         # Cancelada sin ninguna sección iniciada.
-        ws.append(fila_comun + ["", "", "", "", "", "", "", "", ""])
+        ws.append([siguiente_id, fecha_exportacion] + fila_comun +
+                  ["", "", "", "", "", "", "", "", ""])
 
+    _aplicar_formato_tabla(ws)
     wb.save(ruta_excel)
     return ruta_excel
 

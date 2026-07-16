@@ -63,16 +63,23 @@ Notas:
     incidencias de tiempo y de peso). Es la fuente de datos para la
     exportación a Excel.
 - `export.py` — genera/actualiza `exports/registro_fabricacion.xlsx` con una
-  fila por sección, incluyendo: fecha de exportación, estado (CANCELADA/
-  FINALIZADA), OF, **lote** (`tbOrdenFabricacion.Lote`, se obtiene
-  automáticamente de Solmicro pero solo se exporta, nunca se muestra en la
-  app), máquina, operarios iniciales, fechas de inicio/fin, tiempo total,
-  peso tara/total/neto y su incidencia si la hubo, y por cada
-  sección: instrucción, operarios activos al cerrarla, tiempo
-  previsto/real, incidencia, y las pausas ocurridas **durante esa sección
-  concreta** en tres columnas separadas ("Pausa inicio", "Pausa fin",
-  "Pausa (min)"); si hay varias pausas en la misma sección, se separan con
-  " ; " dentro de cada columna.
+  fila por sección, incluyendo: **ID autoincremental** (1, 2, 3... continúa
+  donde se quedó la última fila, no se reinicia entre exportaciones), fecha
+  de exportación, estado (CANCELADA/FINALIZADA), OF, **lote**
+  (`tbOrdenFabricacion.Lote`, se obtiene automáticamente de Solmicro pero
+  solo se exporta, nunca se muestra en la app), máquina, operarios
+  iniciales, fechas de inicio/fin, tiempo total, peso tara/total/neto y su
+  incidencia si la hubo, y por cada sección: instrucción, operarios activos
+  al cerrarla, tiempo previsto/real, incidencia, y las pausas ocurridas
+  **durante esa sección concreta** en tres columnas separadas ("Pausa
+  inicio", "Pausa fin", "Pausa (min)"); si hay varias pausas en la misma
+  sección, se separan con " ; " dentro de cada columna.
+  - El rango de datos se formatea como una **Tabla de Excel real** (con
+    encabezados, filtros y filas alternas), no solo como celdas sueltas;
+    se rehace en cada exportación para cubrir las filas nuevas.
+  - Los encabezados de fecha/hora usan "y" en lugar de "/" (p. ej.
+    "Fecha y Hora exportación") por compatibilidad con otras aplicaciones
+    que puedan interpretar "/" como separador al importar el Excel.
   - En producción, `exports/` debería ser una carpeta sincronizada con la
     nube (OneDrive/SharePoint/Google Drive) asociada a
     `fabricacion@quiadsa.com`, o bien puedes activar la subida directa vía
