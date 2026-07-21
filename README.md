@@ -194,6 +194,11 @@ que Solmicro ha respondido.
   pulsarlos (QWERTY para texto, numérico para cuba y pesos).
 - **Fase 2**: instrucción de la sección, temporizador ascendente, botones
   Cancelar OF (arriba-izquierda), Anterior y Siguiente/Finalizar.
+  - Los botones de arriba (Cancelar/Pausa) y de abajo (Anterior/Siguiente)
+    quedan **siempre fijos y visibles**; la zona central (instrucción,
+    temporizador y panel de operarios) es **desplazable** (rueda del ratón
+    o arrastre táctil) si el texto de la instrucción es muy largo, para
+    que nunca quede tapada ni empuje los botones fuera de la pantalla.
   - **Toda cancelación de una OF** (botón Cancelar OF, cerrar su pestaña, o
     cerrar la aplicación) **exige escribir un motivo** mediante una ventana
     con botones **Aceptar** y **Cancelar**. Si se pulsa Cancelar (o se
@@ -260,3 +265,4 @@ que Solmicro ha respondido.
   táctiles; ajústalos según la resolución real del dispositivo.
 - Los porcentajes de margen (tiempo y peso) son ajustables en `config.py`
   (`MARGEN_TIEMPO_PORCENTAJE` y `MARGEN_PESO_PORCENTAJE`).
+  

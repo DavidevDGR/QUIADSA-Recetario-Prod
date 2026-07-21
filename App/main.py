@@ -396,14 +396,14 @@ class App(tk.Tk):
         es_ultima = t.seccion_idx == len(secciones) - 1
 
         # --- Barra superior: Cancelar (izq) + Pausa (der), en paralelo ---
+        # Se empaqueta ANTES que la zona central para que su espacio quede
+        # siempre reservado y nunca pueda quedar tapada, por muy largo que
+        # sea el texto de la instrucción.
         top = tk.Frame(f)
-        top.pack(fill="x", pady=10, padx=10)
+        top.pack(side="top", fill="x", pady=10, padx=10)
         tk.Button(top, text="✕ CANCELAR OF", font=FONT_N, bg="#e53935", fg="white",
                   command=self._cancelar_of).pack(side="left")
 
-        # Empaquetados de derecha a izquierda: el botón de Pausa queda en la
-        # esquina superior derecha (paralelo a Cancelar), y la etiqueta de
-        # progreso de sección queda justo a su izquierda.
         self.btn_pausa = tk.Button(top, font=FONT_N, command=self._toggle_pausa)
         self.btn_pausa.pack(side="right")
         self._actualizar_boton_pausa(t)
@@ -411,25 +411,10 @@ class App(tk.Tk):
         tk.Label(top, text=f"Sección {seccion.numero} de {len(secciones)}",
                  font=FONT_N).pack(side="right", padx=(0, 10))
 
-        tk.Label(f, text=f"OF: {t.orden.codigo_of}  |  Cuba: {t.cuba_id}",
-                 font=FONT_N, fg="gray").pack(pady=(0, 5))
-
-        # --- Instrucción ---
-        tk.Label(f, text=seccion.texto, font=FONT_T, wraplength=800,
-                 justify="center").pack(pady=10, padx=20)
-
-        # --- Temporizador ---
-        self.timer_lbl = tk.Label(f, text="00:00", font=FONT_TIMER, fg="#1565C0")
-        self.timer_lbl.pack(pady=10)
-        tk.Label(f, text=f"Tiempo previsto: {seccion.tiempo_ejecucion_min} min",
-                 font=FONT_N, fg="gray").pack()
-
-        # --- Gestión de operarios, habilitada también durante la ejecución ---
-        op_box = tk.LabelFrame(f, text="Operarios en esta sección", font=FONT_N)
-        op_box.pack(pady=10, padx=20, fill="x")
-        self._construir_gestor_operarios(op_box, t)
-
         # --- Navegación inferior ---
+        # También se empaqueta ANTES que la zona central (aunque se ve
+        # abajo, gracias a side="bottom") para que su espacio también
+        # quede siempre reservado y los botones nunca queden inaccesibles.
         nav = tk.Frame(f)
         nav.pack(side="bottom", fill="x", pady=20, padx=20)
 
@@ -446,6 +431,27 @@ class App(tk.Tk):
                   fg="white", height=config.BTN_HEIGHT,
                   command=self._seccion_siguiente
                   ).pack(side="right", expand=True, fill="x", padx=10)
+
+        # --- Zona central DESPLAZABLE (instrucción + temporizador +
+        # operarios): si el texto de la sección es muy largo, aquí aparece
+        # una barra de scroll en lugar de tapar/empujar fuera de pantalla
+        # los botones de arriba y abajo, que ya están fijos.
+        contenido = self._crear_area_desplazable(f)
+
+        tk.Label(contenido, text=f"OF: {t.orden.codigo_of}  |  Cuba: {t.cuba_id}",
+                 font=FONT_N, fg="gray").pack(pady=(5, 5))
+
+        tk.Label(contenido, text=seccion.texto, font=FONT_T, wraplength=800,
+                 justify="center").pack(pady=10, padx=20)
+
+        self.timer_lbl = tk.Label(contenido, text="00:00", font=FONT_TIMER, fg="#1565C0")
+        self.timer_lbl.pack(pady=10)
+        tk.Label(contenido, text=f"Tiempo previsto: {seccion.tiempo_ejecucion_min} min",
+                 font=FONT_N, fg="gray").pack()
+
+        op_box = tk.LabelFrame(contenido, text="Operarios en esta sección", font=FONT_N)
+        op_box.pack(pady=10, padx=20, fill="x")
+        self._construir_gestor_operarios(op_box, t)
 
         # Solo se arranca el registro de la sección (y su temporizador) la
         # PRIMERA vez que se muestra esta sección. Si la pantalla se
@@ -465,6 +471,72 @@ class App(tk.Tk):
             t.pausa_inicio_dt = None
 
         self._tick_timer()
+
+    def _crear_area_desplazable(self, parent):
+        """Crea un Canvas+Scrollbar que ocupa el espacio restante de
+        `parent` (una vez descontados los widgets ya empaquetados arriba/
+        abajo) y devuelve el Frame interior donde hay que colocar el
+        contenido. Permite desplazar con la rueda del ratón y también
+        arrastrando con el dedo (touch), para pantallas táctiles."""
+        cont = tk.Frame(parent)
+        cont.pack(side="top", fill="both", expand=True)
+
+        canvas = tk.Canvas(cont, highlightthickness=0)
+        scrollbar = tk.Scrollbar(cont, orient="vertical", command=canvas.yview)
+        interior = tk.Frame(canvas)
+
+        interior_id = canvas.create_window((0, 0), window=interior, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def _ajustar_scrollregion(event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _ajustar_ancho_interior(event):
+            # El frame interior debe ocupar todo el ancho del canvas para
+            # que el contenido (centrado) se vea bien.
+            canvas.itemconfig(interior_id, width=event.width)
+
+        interior.bind("<Configure>", _ajustar_scrollregion)
+        canvas.bind("<Configure>", _ajustar_ancho_interior)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        def _desplazar(delta_unidades):
+            """Desplaza el canvas 'delta_unidades' (1 abajo, -1 arriba),
+            pero solo si no se ha llegado ya al principio/final del
+            contenido, para no poder desplazarse más allá y ver el hueco
+            vacío del canvas (fuera del contenido real)."""
+            arriba, abajo = canvas.yview()
+            if delta_unidades < 0 and arriba <= 0.0:
+                return
+            if delta_unidades > 0 and abajo >= 1.0:
+                return
+            canvas.yview_scroll(delta_unidades, "units")
+
+        # Rueda del ratón (Windows/Mac); en Linux serían los botones 4/5.
+        def _rueda(event):
+            _desplazar(-1 if event.delta > 0 else 1)
+        canvas.bind("<MouseWheel>", _rueda)
+        canvas.bind("<Button-4>", lambda e: _desplazar(-1))
+        canvas.bind("<Button-5>", lambda e: _desplazar(1))
+
+        # Arrastrar con el dedo (touch) sobre una zona libre del canvas.
+        estado_arrastre = {"y": 0}
+
+        def _inicio_arrastre(event):
+            estado_arrastre["y"] = event.y
+
+        def _mover_arrastre(event):
+            delta_px = estado_arrastre["y"] - event.y
+            if abs(delta_px) >= 2:
+                _desplazar(1 if delta_px > 0 else -1)
+                estado_arrastre["y"] = event.y
+
+        canvas.bind("<ButtonPress-1>", _inicio_arrastre)
+        canvas.bind("<B1-Motion>", _mover_arrastre)
+
+        return interior
 
     def _tick_timer(self):
         # Solo debe haber un temporizador visual activo a la vez: el de la
