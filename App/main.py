@@ -30,6 +30,7 @@ from onscreen_keyboard import attach_keyboard
 FONT_N = (config.FONT_FAMILY, config.FONT_SIZE_NORMAL)
 FONT_T = (config.FONT_FAMILY, config.FONT_SIZE_TITLE, "bold")
 FONT_TIMER = (config.FONT_FAMILY, config.FONT_SIZE_TIMER, "bold")
+FONT_COMBO = (config.FONT_FAMILY, config.FONT_SIZE_NORMAL + 6)
 FONT_TAB = (config.FONT_FAMILY, 12, "bold")
 
 # Opciones del desplegable de motivo de incidencia en las secciones (desvío
@@ -647,10 +648,15 @@ class App(tk.Tk):
 
         combo = None
         if opciones:
+            # La fuente del propio desplegable se ajusta con font=...; la
+            # fuente de la LISTA que se abre al pulsarlo es un widget
+            # aparte en Tkinter y hay que fijarla vía option_add, o se
+            # queda con el tamaño diminuto por defecto.
+            self.option_add("*TCombobox*Listbox.font", FONT_COMBO)
             combo_var = tk.StringVar(value=opciones[0])
             combo = ttk.Combobox(win, textvariable=combo_var, values=opciones,
-                                  font=FONT_N, state="readonly", width=40)
-            combo.pack(padx=20, pady=(0, 10))
+                                  font=FONT_COMBO, state="readonly", width=38)
+            combo.pack(padx=20, pady=(0, 10), ipady=6)
 
         txt_frame = tk.Frame(win)
         tk.Label(txt_frame, text="Escriba el motivo:", font=FONT_N
