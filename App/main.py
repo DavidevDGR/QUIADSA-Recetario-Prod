@@ -17,7 +17,7 @@ Ejecutar con:  python main.py
 """
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 import datetime
 from dataclasses import dataclass, field
 from typing import Optional, List, Set
@@ -31,6 +31,18 @@ FONT_N = (config.FONT_FAMILY, config.FONT_SIZE_NORMAL)
 FONT_T = (config.FONT_FAMILY, config.FONT_SIZE_TITLE, "bold")
 FONT_TIMER = (config.FONT_FAMILY, config.FONT_SIZE_TIMER, "bold")
 FONT_TAB = (config.FONT_FAMILY, 12, "bold")
+
+# Opciones del desplegable de motivo de incidencia en las secciones (desvío
+# de tiempo, retroceso con Anterior, cancelaciones). "Otro" habilita una
+# caja de texto libre con teclado en pantalla.
+OPCIONES_INCIDENCIA_SECCION = [
+    "Revisar tiempo (falta o sobra tiempo)",
+    "Orden de secuencia incorrecto",
+    "Secuencia innecesaria",
+    "Falta secuencia",
+    "Otro",
+]
+OPCION_OTRO = "Otro"
 
 COLOR_TAB_ACTIVA = "#FFFFFF"
 COLOR_TAB_INACTIVA = "#CFD8DC"
@@ -78,6 +90,7 @@ class App(tk.Tk):
         super().__init__()
         self.title("Control de Fabricación - Cuba")
         self.attributes("-fullscreen", True)  # Modo táctil pantalla completa
+        self.attributes("-topmost", True)  # refuerzo extra para que no se vea nada por detrás
         self.bind("<Escape>", lambda e: self.attributes("-fullscreen", False))
 
         self.solmicro = SolmicroRepository()
@@ -481,7 +494,7 @@ class App(tk.Tk):
         cont = tk.Frame(parent)
         cont.pack(side="top", fill="both", expand=True)
 
-        canvas = tk.Canvas(cont, highlightthickness=0)
+        canvas = tk.Canvas(cont, highlightthickness=0, bg=parent.cget("bg"))
         scrollbar = tk.Scrollbar(cont, orient="vertical", command=canvas.yview)
         interior = tk.Frame(canvas)
 
@@ -522,10 +535,15 @@ class App(tk.Tk):
         canvas.bind("<Button-5>", lambda e: _desplazar(1))
 
         # Arrastrar con el dedo (touch) sobre una zona libre del canvas.
+        # Se "captura" el puntero mientras dura el arrastre (grab_set) para
+        # que el sistema operativo no interprete un arrastre largo como un
+        # gesto propio (p. ej. mostrar el escritorio) y se vea algo fuera
+        # de la aplicación.
         estado_arrastre = {"y": 0}
 
         def _inicio_arrastre(event):
             estado_arrastre["y"] = event.y
+            canvas.grab_set()
 
         def _mover_arrastre(event):
             delta_px = estado_arrastre["y"] - event.y
@@ -533,8 +551,12 @@ class App(tk.Tk):
                 _desplazar(1 if delta_px > 0 else -1)
                 estado_arrastre["y"] = event.y
 
+        def _fin_arrastre(event):
+            canvas.grab_release()
+
         canvas.bind("<ButtonPress-1>", _inicio_arrastre)
         canvas.bind("<B1-Motion>", _mover_arrastre)
+        canvas.bind("<ButtonRelease-1>", _fin_arrastre)
 
         return interior
 
@@ -598,13 +620,21 @@ class App(tk.Tk):
         return transcurrido < limite_inferior or transcurrido > limite_superior
 
     def _pedir_motivo_incidencia(self, mensaje: str,
-                                  titulo="Motivo de la incidencia") -> str:
+                                  titulo="Motivo de la incidencia",
+                                  opciones: Optional[List[str]] = None) -> str:
         """Ventana modal genérica para pedir un motivo de incidencia (se
         reutiliza para desvíos de tiempo, de peso, retroceso de sección y
         motivos de cancelación). Tiene un botón Cancelar (y cerrar con el
         aspa del sistema operativo hace lo mismo) por si el operario ha
         pulsado el botón correspondiente sin querer: en ese caso devuelve
-        None y la acción que lo originó no se lleva a cabo."""
+        None y la acción que lo originó no se lleva a cabo.
+
+        Si se pasa `opciones` (lista de motivos predefinidos), se muestra
+        un desplegable con esas opciones en lugar de una caja de texto
+        libre directamente. Si la opción elegida es "Otro", aparece una
+        caja de texto (con teclado en pantalla) para escribir el motivo a
+        mano. Si `opciones` es None, se mantiene el comportamiento anterior
+        de caja de texto libre siempre visible."""
         resultado = {"motivo": None}
 
         win = tk.Toplevel(self)
@@ -615,10 +645,30 @@ class App(tk.Tk):
         tk.Label(win, text=mensaje, font=FONT_N, wraplength=500,
                  justify="left").pack(padx=20, pady=15)
 
-        txt = tk.Text(win, font=FONT_N, width=45, height=4)
-        txt.pack(padx=20, pady=10)
-        txt.focus_set()
+        combo = None
+        if opciones:
+            combo_var = tk.StringVar(value=opciones[0])
+            combo = ttk.Combobox(win, textvariable=combo_var, values=opciones,
+                                  font=FONT_N, state="readonly", width=40)
+            combo.pack(padx=20, pady=(0, 10))
+
+        txt_frame = tk.Frame(win)
+        tk.Label(txt_frame, text="Escriba el motivo:", font=FONT_N
+                 ).pack(anchor="w")
+        txt = tk.Text(txt_frame, font=FONT_N, width=45, height=4)
+        txt.pack()
         attach_keyboard(txt)
+
+        def _actualizar_visibilidad_texto(event=None):
+            if combo is None or combo_var.get() == OPCION_OTRO:
+                txt_frame.pack(padx=20, pady=10)
+                txt.focus_set()
+            else:
+                txt_frame.pack_forget()
+
+        if combo is not None:
+            combo.bind("<<ComboboxSelected>>", _actualizar_visibilidad_texto)
+        _actualizar_visibilidad_texto()
 
         def cancelar():
             resultado["motivo"] = None
@@ -627,6 +677,10 @@ class App(tk.Tk):
         win.protocol("WM_DELETE_WINDOW", cancelar)
 
         def aceptar():
+            if combo is not None and combo_var.get() != OPCION_OTRO:
+                resultado["motivo"] = combo_var.get()
+                win.destroy()
+                return
             motivo = txt.get("1.0", "end").strip()
             if not motivo:
                 messagebox.showwarning("Motivo requerido",
@@ -674,7 +728,8 @@ class App(tk.Tk):
             motivo = self._pedir_motivo_incidencia(
                 f"El tiempo empleado se desvía más de un {pct}% del previsto.\n"
                 "Indique el motivo para poder continuar:",
-                "Motivo del desvío de tiempo")
+                "Motivo del desvío de tiempo",
+                opciones=OPCIONES_INCIDENCIA_SECCION)
             if motivo is None:
                 return  # el operario canceló el diálogo, no avanza
 
@@ -713,7 +768,8 @@ class App(tk.Tk):
         self._detener_timer()
         motivo = self._pedir_motivo_incidencia(
             "Indique el motivo para volver a la sección anterior:",
-            "Motivo del retroceso de sección")
+            "Motivo del retroceso de sección",
+            opciones=OPCIONES_INCIDENCIA_SECCION)
         if motivo is None:
             self._tick_timer()  # el operario pulsó Cancelar: se reanuda el contador
             return

@@ -198,7 +198,12 @@ que Solmicro ha respondido.
     quedan **siempre fijos y visibles**; la zona central (instrucción,
     temporizador y panel de operarios) es **desplazable** (rueda del ratón
     o arrastre táctil) si el texto de la instrucción es muy largo, para
-    que nunca quede tapada ni empuje los botones fuera de la pantalla.
+    que nunca quede tapada ni empuje los botones fuera de la pantalla. El
+    desplazamiento no permite pasarse del principio/final del contenido
+    (evita ver "hueco" fuera de la zona de la app), y durante el arrastre
+    se captura el puntero para reducir el riesgo de que el sistema
+    operativo interprete el gesto como algo suyo (p. ej. mostrar el
+    escritorio) en pantallas táctiles.
   - **Toda cancelación de una OF** (botón Cancelar OF, cerrar su pestaña, o
     cerrar la aplicación) **exige escribir un motivo** mediante una ventana
     con botones **Aceptar** y **Cancelar**. Si se pulsa Cancelar (o se
@@ -211,6 +216,14 @@ que Solmicro ha respondido.
     indicado se registra como la incidencia de la sección que se cierra al
     retroceder, y se exporta al Excel. Si se pulsa Cancelar en ese diálogo,
     no se retrocede de sección.
+  - Las ventanas de motivo de **desvío de tiempo** y de **retroceso de
+    sección (Anterior)** muestran un **desplegable** con motivos
+    predefinidos: "Revisar tiempo (falta o sobra tiempo)", "Orden de
+    secuencia incorrecto", "Secuencia innecesaria", "Falta secuencia" y
+    "Otro" (esta última habilita una caja de texto libre con teclado en
+    pantalla para escribir un motivo distinto). Las ventanas de
+    cancelación de OF y de desviación de peso mantienen la caja de texto
+    libre, al no encajar esas mismas opciones.
   - **Botón Pausa/Reanudar** (arriba a la derecha, en paralelo a Cancelar
     OF): amarillo "⏸ PAUSA" al
     pulsarlo registra la fecha/hora de inicio de la pausa y cambia a verde
@@ -265,4 +278,3 @@ que Solmicro ha respondido.
   táctiles; ajústalos según la resolución real del dispositivo.
 - Los porcentajes de margen (tiempo y peso) son ajustables en `config.py`
   (`MARGEN_TIEMPO_PORCENTAJE` y `MARGEN_PESO_PORCENTAJE`).
-  
